@@ -1,0 +1,74 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>Formula Racing 3D</title><style>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070b;font-family:Arial,sans-serif;touch-action:none}body{display:grid;place-items:center}#game{position:relative;width:min(100vw,calc(100vh * 440 / 760));aspect-ratio:440/760;overflow:hidden;border:2px solid #e10600;background:#0b1622;box-shadow:0 0 24px #e1060080}canvas{display:block;width:100%;height:100%;touch-action:none}#ui{position:absolute;inset:12px 12px auto;display:flex;gap:8px;z-index:2;align-items:flex-start}button,.pill{border:1px solid #ffffff30;border-radius:10px;background:#080c12d9;color:#fff;padding:9px 11px;font-weight:800}.pill{color:#ff5656}#kmh{margin-left:auto;text-align:center;line-height:1}#kmh b{font-size:22px;color:#fff}#kmh small{display:block;font-size:9px;color:#b9c4d0;margin-top:3px}button:active{transform:scale(.95)}#hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:#fff;background:#0008;border-radius:20px;padding:8px 13px;font-size:13px;z-index:2;white-space:nowrap;transition:.3s;pointer-events:none}.modal{display:none;position:absolute;inset:0;z-index:5;place-items:center;background:#030509d9}.card{width:80%;padding:24px;text-align:center;border-radius:16px;background:#141b25;border:1px solid #fff3;color:#fff}.card h1{margin:0 0 10px;color:#ff453e}.card button{margin:7px;width:85%;background:#d90707}.menu{display:none;position:absolute;z-index:4;top:58px;left:12px;width:245px;padding:14px;border-radius:14px;background:#0a0f17f5;color:#fff;border:1px solid #fff3}.menu.open{display:block}.colors{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.color{width:38px;height:38px;border-radius:50%;padding:0;background:var(--c)}.color.sel{outline:3px solid #fff}.small,.mode{width:100%;margin-top:10px;background:#202a36}.mode{text-align:left;margin-top:8px}.mode.active{background:#c90000;box-shadow:0 0 13px #f22}.label{font-size:12px;color:#bdc7d4;margin:13px 0 7px;text-transform:uppercase;letter-spacing:.7px}</style></head><body><div id="game"><canvas id="c"></canvas><div id="ui"><button id="menu">☰</button><div class="pill">Обгоны: <span id="score">0</span>/<span id="goal">50</span></div><div class="pill" id="kmh"><b id="km">145</b><small>KM/H</small></div></div><div id="hint">Проводи пальцем по экрану, чтобы рулить</div><div id="settings" class="menu"><b>Настройки</b><div class="label">Режим гонки</div><button class="mode active" data-mode="normal">Обычный — 50 обгонов</button><button class="mode" data-mode="road">Дорожный — 500 обгонов</button><button class="mode" data-mode="hard">Хардмод — 150 обгонов</button><button class="mode" data-mode="extreme">Хардмод II — 500 обгонов</button><div class="label">Цвет болида</div><div class="colors"><button class="color sel" style="--c:#e10600" data-c="#e10600" data-a="#ffffff" data-d="#650000"></button><button class="color" style="--c:#1769ff" data-c="#1769ff" data-a="#ffffff" data-d="#071c68"></button><button class="color" style="--c:#00ad71" data-c="#00ad71" data-a="#dcfff3" data-d="#004d33"></button><button class="color" style="--c:#ff8900" data-c="#ff8900" data-a="#181818" data-d="#7a3b00"></button><button class="color" style="--c:#8d31e4" data-c="#8d31e4" data-a="#ffffff" data-d="#33085e"></button><button class="color" style="--c:#f5c400" data-c="#f5c400" data-a="#222222" data-d="#806300"></button><button class="color" style="--c:#ec1762" data-c="#ec1762" data-a="#ffffff" data-d="#72072c"></button><button class="color" style="--c:#00a8e8" data-c="#00a8e8" data-a="#ffffff" data-d="#005071"></button></div><button class="small" id="continue">▶ Продолжить</button></div><div class="modal" id="overlay"><div class="card"><h1 id="title">АВАРИЯ</h1><p id="msg"></p><button id="restart">Начать заново</button></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),game=$('#game'),scoreEl=$('#score'),goalEl=$('#goal'),kmEl=$('#km'),hint=$('#hint'),settings=$('#settings'),overlay=$('#overlay'),title=$('#title'),msg=$('#msg');
+const K=.08,cl=(v,a,b)=>Math.max(a,Math.min(b,v)),LANES=[-4,0,4];
+let run=true,settingsOpen=false,score=0,speed=460,spawn=0,mode='normal',prev=null,tx=0,px=0,cars=[];
+const modes={normal:{goal:50,start:460,add:42,delay:900,name:'Обычный'},road:{goal:500,start:460,add:42,delay:900,name:'Дорожный'},hard:{goal:150,start:820,add:68,delay:520,name:'Хардмод'},extreme:{goal:500,start:1080,add:92,delay:330,name:'Хардмод II'}};
+const themes=[['#1769ff','#ffffff','#071c68'],['#ff8900','#181818','#7a3b00'],['#8d31e4','#ffffff','#33085e'],['#00ad71','#dcfff3','#004d33'],['#f5c400','#222222','#806300'],['#ec1762','#ffffff','#72072c']];
+let mine=['#e10600','#ffffff','#650000'];
+
+// --- сцена ---
+const R=new THREE.WebGLRenderer({canvas:$('#c'),antialias:true}),S=new THREE.Scene(),cam=new THREE.PerspectiveCamera(62,440/760,.1,300);
+S.background=new THREE.Color(0x0b1622);S.fog=new THREE.Fog(0x0b1622,45,175);
+S.add(new THREE.AmbientLight(0xaabbdd,.75));const sun=new THREE.DirectionalLight(0xffffff,.9);sun.position.set(6,12,10);S.add(sun);
+function resize(){const w=game.clientWidth,h=game.clientHeight;R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+
+// дорога: 12 ед. асфальта + по 1 ед. поребрик, тайл 8 ед. длиной
+const tc=document.createElement('canvas');tc.width=448;tc.height=256;const g=tc.getContext('2d');
+g.fillStyle='#2a3038';g.fillRect(0,0,448,256);g.fillStyle='#e10600';g.fillRect(0,0,32,128);g.fillRect(416,0,32,128);
+g.fillStyle='#f2f2f2';g.fillRect(0,128,32,128);g.fillRect(416,128,32,128);g.fillStyle='rgba(255,255,255,.7)';[160,288].forEach(v=>g.fillRect(v-3,0,6,128));
+const tex=new THREE.CanvasTexture(tc);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(1,30);tex.anisotropy=R.capabilities.getMaxAnisotropy();
+const roadM=new THREE.Mesh(new THREE.PlaneGeometry(14,240),new THREE.MeshBasicMaterial({map:tex}));roadM.rotation.x=-Math.PI/2;roadM.position.z=-100;S.add(roadM);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshBasicMaterial({color:0x0c131a}));ground.rotation.x=-Math.PI/2;ground.position.set(0,-.03,-100);S.add(ground);
+[-8.5,8.5].forEach(x=>{const b=new THREE.Mesh(new THREE.BoxGeometry(.5,1,240),new THREE.MeshLambertMaterial({color:0x1d2935}));b.position.set(x,.5,-100);S.add(b)});
+// фонари вдоль трассы
+const posts=[],pg=new THREE.BoxGeometry(.2,6,.2),hg=new THREE.BoxGeometry(.9,.2,.5),pm=new THREE.MeshLambertMaterial({color:0x3a4757}),hm=new THREE.MeshBasicMaterial({color:0xfff2b0});
+[-1,1].forEach(s=>{for(let i=0;i<14;i++){const o=new THREE.Group(),a=new THREE.Mesh(pg,pm),h=new THREE.Mesh(hg,hm);a.position.y=3;h.position.set(-s*.4,6,0);o.add(a,h);o.position.set(s*10,0,25-i*20);S.add(o);posts.push(o)}});
+
+// болид (взгляд сзади: видно заднее антикрыло, колёса, шлем)
+function buildCar(c,a,d,me){const G=new THREE.Group(),L=col=>new THREE.MeshLambertMaterial({color:col}),B=(w,h,l)=>new THREE.BoxGeometry(w,h,l);
+const add=(geo,col,x,y,z,rx)=>{const o=new THREE.Mesh(geo,col.isMaterial?col:L(col));o.position.set(x,y,z);if(rx)o.rotation.x=rx;G.add(o);return o};
+add(B(1.1,.5,2.8),c,0,.55,.2);add(new THREE.CylinderGeometry(.08,.38,1.7,10),c,0,.5,-2,-Math.PI/2);
+add(B(.26,.06,3.4),a,0,.85,-.1);add(B(.5,.4,1.4),c,-.78,.5,.4);add(B(.5,.4,1.4),c,.78,.5,.4);add(B(.38,.55,1),c,0,1.05,.7);
+add(B(2.3,.08,.55),d,0,.2,-2.75);add(B(.08,.25,.55),c,-1.15,.28,-2.75);add(B(.08,.25,.55),c,1.15,.28,-2.75);
+add(B(1.9,.09,.5),c,0,1.3,1.95);add(B(.07,.55,.65),d,-.95,1.08,1.95);add(B(.07,.55,.65),d,.95,1.08,1.95);add(B(.1,.55,.1),d,0,1,1.75);add(B(1.4,.08,.4),d,0,.35,2.1);
+add(B(.34,.12,.05),new THREE.MeshBasicMaterial({color:0xff2020}),0,.62,2.1);
+const wg=(r,w)=>{const m=new THREE.CylinderGeometry(r,r,w,18);m.rotateZ(Math.PI/2);return m},w1=wg(.5,.75),w2=wg(.42,.55),wm=L(0x0a0b0d);
+[-1,1].forEach(s=>{add(w1,wm,s*1.1,.5,1.35);add(w2,wm,s*1.1,.42,-1.65);add(B(.78,.06,.1),0xe6cf00,s*1.1,.5,1.35)});
+add(new THREE.SphereGeometry(.24,14,10),me?0xffd800:a,0,1.05,-.15);
+const halo=new THREE.Mesh(new THREE.TorusGeometry(.32,.04,6,14,Math.PI),L(0x14181c));halo.position.set(0,1.05,-.2);G.add(halo);
+return G}
+let me=buildCar(...mine,true);S.add(me);
+function setMine(c,a,d){mine=[c,a,d];S.remove(me);me=buildCar(c,a,d,true);me.position.x=px;S.add(me)}
+
+// управление
+function target(cx){if(!run||settingsOpen)return;const r=$('#c').getBoundingClientRect();tx=cl(((cx-r.left)/r.width-.5)*2*5.4,-5,5);hint.style.opacity=0}
+const cv=$('#c');cv.addEventListener('pointerdown',e=>target(e.clientX));cv.addEventListener('pointermove',e=>{if(e.buttons)target(e.clientX)});
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')tx=cl(tx-2.2,-5,5);if(e.key==='ArrowRight'||e.key==='d')tx=cl(tx+2.2,-5,5)});
+
+function make(){const t=themes[(Math.random()*themes.length)|0],o=buildCar(...t,false);o.position.set(LANES[(Math.random()*3)|0],0,-200);S.add(o);cars.push({o,pass:false})}
+function clear(){cars.forEach(q=>S.remove(q.o));cars=[]}
+function update(dt){if(!run||settingsOpen)return;
+px+=(tx-px)*(1-Math.exp(-12*dt));const dx=tx-px;me.position.x=px;me.rotation.y=cl(-dx*.07,-.18,.18);me.rotation.z=cl(-dx*.02,-.05,.05);
+const d=speed*K*dt;tex.offset.y+=d/8;posts.forEach(p=>{p.position.z+=d;if(p.position.z>25)p.position.z-=280});
+spawn+=dt*1000;const m=modes[mode],easy=mode==='normal'||mode==='road',delay=Math.max(easy?550:220,m.delay-score*(easy?6:3));if(spawn>delay){make();spawn=0}
+for(let i=cars.length-1;i>=0;i--){const q=cars[i];q.o.position.z+=d;const dz=q.o.position.z;
+if(Math.abs(q.o.position.x-px)<2.1&&Math.abs(dz)<4.3){lose();return}
+if(!q.pass&&dz>4.5){q.pass=true;score++;scoreEl.textContent=score;if(score%10===0)speed+=m.add;if(score>=m.goal){win();return}}
+if(dz>20){S.remove(q.o);cars.splice(i,1)}}
+kmEl.textContent=Math.round(cl(145+speed*.27,0,520))}
+function frame(t){if(prev==null)prev=t;const dt=Math.min((t-prev)/1000,.033);prev=t;update(dt);
+cam.fov=62+cl((speed-460)/60,0,16);cam.updateProjectionMatrix();
+cam.position.set(px*.75,3.3,8.4);cam.lookAt(px*.55,1.1,-14);R.render(S,cam);requestAnimationFrame(frame)}
+function lose(){run=false;overlay.style.display='grid';title.textContent='АВАРИЯ';msg.textContent='Ты врезался. Счёт обнулён.';score=0;scoreEl.textContent=0}
+function win(){run=false;overlay.style.display='grid';title.textContent='ПОБЕДА!';msg.textContent='Ты прошёл режим «'+modes[mode].name+'»!'}
+function restart(){score=0;scoreEl.textContent=0;speed=modes[mode].start;spawn=0;clear();px=tx=0;me.position.x=0;run=true;settingsOpen=false;settings.classList.remove('open');overlay.style.display='none';prev=null}
+$('#restart').onclick=restart;
+$('#menu').onclick=()=>{settingsOpen=!settingsOpen;settings.classList.toggle('open',settingsOpen);if(settingsOpen){prev=null;hint.style.opacity=0}};
+$('#continue').onclick=()=>{settingsOpen=false;settings.classList.remove('open');prev=null};
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('.mode').forEach(q=>q.classList.remove('active'));b.classList.add('active');goalEl.textContent=modes[mode].goal;restart()});
+document.querySelectorAll('.color').forEach(b=>b.onclick=()=>{setMine(b.dataset.c,b.dataset.a,b.dataset.d);document.querySelectorAll('.color').forEach(q=>q.classList.remove('sel'));b.classList.add('sel')});
+requestAnimationFrame(frame);
+</script></body></html>
